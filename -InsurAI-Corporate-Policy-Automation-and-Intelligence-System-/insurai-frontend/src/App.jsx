@@ -5,8 +5,8 @@ import Homepage from "./pages/Homepage.jsx";
 // Employee Auth & Dashboard
 import EmployeeRegister from "./pages/auth/EmployeeRegister.jsx";
 import EmployeeLogin from "./pages/auth/EmployeeLogin.jsx";
-import ForgotPassword from "./pages/auth/ForgotPassword.jsx"; // ✅ existing
-import ResetPassword from "./pages/auth/ResetPassword.jsx";   // ✅ existing
+import ForgotPassword from "./pages/auth/ForgotPassword.jsx"; // 
+import ResetPassword from "./pages/auth/ResetPassword.jsx";   //
 import EmployeeDashboard from "./pages/dashboard/Employee/EmployeeDashboard.jsx";
 
 // Admin Auth & Dashboard
