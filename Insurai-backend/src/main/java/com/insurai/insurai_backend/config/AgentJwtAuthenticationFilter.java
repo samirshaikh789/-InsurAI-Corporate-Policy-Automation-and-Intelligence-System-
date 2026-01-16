@@ -1,7 +1,7 @@
 package com.insurai.insurai_backend.config;
 
 import java.io.IOException;
-import java.util.Collections;
+import java.util.List;
 
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -33,51 +33,68 @@ public class AgentJwtAuthenticationFilter extends OncePerRequestFilter {
             FilterChain filterChain
     ) throws ServletException, IOException {
 
-        // Get the Authorization header
         String authHeader = request.getHeader("Authorization");
-        String token = null;
-        String email = null;
 
-        if (authHeader != null && authHeader.startsWith("Bearer ")) {
-            token = authHeader.substring(7);
-            try {
-                email = jwtUtil.extractUsername(token);
-            } catch (Exception e) {
-                System.out.println("Invalid JWT: " + e.getMessage());
-            }
+        // No token → let request continue
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            filterChain.doFilter(request, response);
+            return;
         }
 
-        // Validate token
-        if (email != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-            Agent agent = agentService.findByEmail(email).orElse(null);
+        String token = authHeader.substring(7);
+        String email;
 
-            if (agent != null && jwtUtil.validateToken(token, email)) {
-                SimpleGrantedAuthority authority = new SimpleGrantedAuthority("ROLE_AGENT");
+        try {
+            email = jwtUtil.extractUsername(token);
+        } catch (Exception e) {
+            filterChain.doFilter(request, response);
+            return;
+        }
 
-                UsernamePasswordAuthenticationToken authToken =
-                        new UsernamePasswordAuthenticationToken(
-                                agent, null, Collections.singletonList(authority)
-                        );
-                authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                SecurityContextHolder.getContext().setAuthentication(authToken);
-            }
+        // Already authenticated
+        if (SecurityContextHolder.getContext().getAuthentication() != null) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
+        Agent agent = agentService.findByEmail(email).orElse(null);
+
+        if (agent != null && jwtUtil.validateToken(token, email)) {
+
+            // IMPORTANT: hasRole("AGENT") expects ROLE_AGENT internally
+            SimpleGrantedAuthority authority =
+                    new SimpleGrantedAuthority("ROLE_AGENT");
+
+            UsernamePasswordAuthenticationToken authentication =
+                    new UsernamePasswordAuthenticationToken(
+                            agent,
+                            null,
+                            List.of(authority)
+                    );
+
+            authentication.setDetails(
+                    new WebAuthenticationDetailsSource().buildDetails(request)
+            );
+
+            SecurityContextHolder.getContext().setAuthentication(authentication);
+
+            // Debug
+            System.out.println("[AgentJwtFilter] Authenticated: " + email);
+            System.out.println("[AgentJwtFilter] Authority: ROLE_AGENT");
         }
 
         filterChain.doFilter(request, response);
     }
 
     @Override
-    protected boolean shouldNotFilter(HttpServletRequest request) throws ServletException {
-        // Skip filter for public endpoints and non-agent paths
+    protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getServletPath();
-        return path.startsWith("/auth/") ||
-               path.startsWith("/admin/") ||
-               path.startsWith("/hr/") ||
-               path.startsWith("/employee/") ||
-               path.startsWith("/uploads/") ||
-               path.startsWith("/agent/login") ||
-               path.startsWith("/agent/register") ||
-               path.startsWith("/agent/queries/pending") ||
-               path.startsWith("/agent/availability");
+
+        return "OPTIONS".equalsIgnoreCase(request.getMethod())
+                || path.startsWith("/agent/login")
+                || path.startsWith("/agent/register")
+                || path.startsWith("/auth/")
+                || path.startsWith("/h2-console")
+                || path.startsWith("/uploads/");
     }
 }

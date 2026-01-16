@@ -2,111 +2,81 @@ package com.insurai.insurai_backend.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.JavaMailSenderImpl;
-
-
 
 @Configuration
 public class SecurityConfig {
 
     private final EmployeeJwtAuthenticationFilter employeeJwtAuthenticationFilter;
     private final AgentJwtAuthenticationFilter agentJwtAuthenticationFilter;
-    private final HrJwtAuthenticationFilter hrJwtAuthenticationFilter; // Added
+    private final HrJwtAuthenticationFilter hrJwtAuthenticationFilter;
 
     public SecurityConfig(EmployeeJwtAuthenticationFilter employeeJwtAuthenticationFilter,
                           AgentJwtAuthenticationFilter agentJwtAuthenticationFilter,
-                          HrJwtAuthenticationFilter hrJwtAuthenticationFilter) { // Added
+                          HrJwtAuthenticationFilter hrJwtAuthenticationFilter) {
         this.employeeJwtAuthenticationFilter = employeeJwtAuthenticationFilter;
         this.agentJwtAuthenticationFilter = agentJwtAuthenticationFilter;
-        this.hrJwtAuthenticationFilter = hrJwtAuthenticationFilter; // Added
+        this.hrJwtAuthenticationFilter = hrJwtAuthenticationFilter;
     }
-    @Bean
-public PasswordEncoder passwordEncoder() {
-    return new BCryptPasswordEncoder();
-}
-@Bean
-public JavaMailSender javaMailSender() {
-    return new JavaMailSenderImpl();
-}
-
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
             .csrf(csrf -> csrf.disable())
-            .cors(cors -> {}) // Keep global CORS
+            .headers(headers -> headers.frameOptions(frame -> frame.sameOrigin()))
+            .cors(cors -> {})
+
             .authorizeHttpRequests(auth -> auth
-                // Employee claim endpoints
-                .requestMatchers("/employee/claims/**").hasRole("EMPLOYEE")
-                .requestMatchers("/employee/queries/**").hasRole("EMPLOYEE")
-                .requestMatchers("/uploads/**").permitAll()
-                .requestMatchers("/hr/claims").hasAnyRole("HR")
-                .requestMatchers("/admin/claims").hasAnyRole("ADMIN")
-                .requestMatchers("/hr/claims/fraud").hasRole("HR")
-                .requestMatchers("/admin/claims/fraud").hasRole("ADMIN")
-                // Notifications endpoints
-               .requestMatchers("/notifications/user/**").hasAnyAuthority("ROLE_EMPLOYEE", "ROLE_HR", "ROLE_ADMIN")
-.requestMatchers("/notifications/**").hasAnyRole("HR", "ADMIN") // delete endpoints
-.requestMatchers("/notifications/*/read").hasAnyAuthority("ROLE_EMPLOYEE", "ROLE_HR", "ROLE_ADMIN") // allow mark as read
 
-    .requestMatchers("/employee/chatbot").hasRole("EMPLOYEE")
+                // Preflight
+                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
+                // H2
+                .requestMatchers("/h2-console/**").permitAll()
 
-
-
-                // Public endpoints
+                // Public auth endpoints
                 .requestMatchers(
-                    "/auth/**",
-                    "/auth/forgot-password",
-                    "/auth/reset-password/**", 
-                    "/admin/**",
-                    "/admin/policies",
-                    "/admin/policies/save",
-                    "/agent/**",
-                    "/employee/login",
-                    "/agent/login",
-                    "/employee/register",
-                    "/employee/policies",
-                    "/hr/login",
-                    "/agent/availability/**",
-                    "/agent/queries/pending/**",
-                    "/employees/**",
-                    "/hr/**"
+                        "/auth/**",
+                        "/agent/login",
+                        "/agent/register",
+                        "/employee/login",
+                        "/employee/register",
+                        "/hr/login",
+                        "/admin/login",
+                        "/auth/forgot-password",
+                        "/auth/reset-password/**"
                 ).permitAll()
 
-                // Agent endpoints
-                .requestMatchers("/agent/queries/respond/**", "/agent/queries/all/**").hasRole("AGENT")
+                // Public resources
+                .requestMatchers("/uploads/**").permitAll()
+                .requestMatchers("/employee/policies").permitAll()
 
-                // Employee endpoints (other than claims/queries)
-                .requestMatchers("/employee/**").hasRole("EMPLOYEE")
+                // Secured by authority (NOT role)
+                .requestMatchers("/agent/**").hasAuthority("AGENT")
+                .requestMatchers("/employee/**").hasAuthority("EMPLOYEE")
+                .requestMatchers("/hr/**").hasAuthority("HR")
+                .requestMatchers("/admin/**").hasAuthority("ADMIN")
 
-                // Claim endpoints for HR/Admin
-                .requestMatchers(
-                    "/claims/approve/**",
-                    "/claims/reject/**",
-                    "/claims/all"
-                ).hasAnyRole("HR", "ADMIN")
-
-                // Everything else requires authentication
                 .anyRequest().authenticated()
             )
+
             .httpBasic(httpBasic -> httpBasic.disable())
             .formLogin(formLogin -> formLogin.disable());
 
-        // Add JWT filters in order
         http.addFilterBefore(employeeJwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
         http.addFilterBefore(agentJwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
-        http.addFilterBefore(hrJwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class); // Added
+        http.addFilterBefore(hrJwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
@@ -116,14 +86,28 @@ public JavaMailSender javaMailSender() {
         return authConfig.getAuthenticationManager();
     }
 
-    // Global CORS configuration
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
+
+    // Mail
+    @Bean
+    public JavaMailSender javaMailSender() {
+        return new JavaMailSenderImpl();
+    }
+
+    // CORS
     @Bean
     public WebMvcConfigurer corsConfigurer() {
         return new WebMvcConfigurer() {
             @Override
             public void addCorsMappings(CorsRegistry registry) {
                 registry.addMapping("/**")
-                        .allowedOrigins("http://localhost:5173", "http://localhost:8080")
+                        .allowedOrigins("http://localhost:5173",
+                                        "http://localhost:5174",
+                                        "http://localhost:8080"
+                        )
                         .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
                         .allowedHeaders("*")
                         .allowCredentials(true);
