@@ -35,7 +35,6 @@ public class AgentJwtAuthenticationFilter extends OncePerRequestFilter {
 
         String authHeader = request.getHeader("Authorization");
 
-        // No token → let request continue
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             filterChain.doFilter(request, response);
             return;
@@ -51,7 +50,6 @@ public class AgentJwtAuthenticationFilter extends OncePerRequestFilter {
             return;
         }
 
-        // Already authenticated
         if (SecurityContextHolder.getContext().getAuthentication() != null) {
             filterChain.doFilter(request, response);
             return;
@@ -61,9 +59,9 @@ public class AgentJwtAuthenticationFilter extends OncePerRequestFilter {
 
         if (agent != null && jwtUtil.validateToken(token, email)) {
 
-            // IMPORTANT: hasRole("AGENT") expects ROLE_AGENT internally
+            // FIXED: use AGENT, not ROLE_AGENT
             SimpleGrantedAuthority authority =
-                    new SimpleGrantedAuthority("ROLE_AGENT");
+                    new SimpleGrantedAuthority("AGENT");
 
             UsernamePasswordAuthenticationToken authentication =
                     new UsernamePasswordAuthenticationToken(
@@ -78,9 +76,8 @@ public class AgentJwtAuthenticationFilter extends OncePerRequestFilter {
 
             SecurityContextHolder.getContext().setAuthentication(authentication);
 
-            // Debug
             System.out.println("[AgentJwtFilter] Authenticated: " + email);
-            System.out.println("[AgentJwtFilter] Authority: ROLE_AGENT");
+            System.out.println("[AgentJwtFilter] Authority: AGENT");
         }
 
         filterChain.doFilter(request, response);
